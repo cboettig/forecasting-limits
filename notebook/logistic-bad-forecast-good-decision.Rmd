@@ -51,6 +51,18 @@ d %>% pivot_longer(names(models), "model") %>%
 ```
 
 
+Comparing forecasts
+
+```{r}
+x0 <- 3
+
+
+
+```
+
+
+## Optimal Management
+
 ```{r}
 # A function to compute the transition matrices for each model:
 transition_matrices <- function(f,
@@ -96,11 +108,13 @@ for (k in 1:n_s) {
   }
 }
 
-  
-
 transitions <- lapply(models, function(f) transition_matrices(f, states, actions, sigma_g))
 
 ```
+
+
+Evolution of probability distribution at matrix exponent
+
 
 
 ```{r}
@@ -114,7 +128,30 @@ policies <- map_dfr(transitions, function(P){
 
 
 ```{r}
-
 policies %>%
-  ggplot(aes(states,escapement)) + geom_line()
+  ggplot(aes(states,escapement, col=model)) + geom_line()
 ```
+
+
+
+
+
+
+Management under the wrong model
+
+```{r}
+
+
+```
+
+
+## Conclusions
+
+- A good forecast does not mean good management
+- A bad forecast does not mean the model is bad for management
+- A model permitting successful management does not imply the model is "correct" or generally "good at forecasting"
+
+
+
+
+
