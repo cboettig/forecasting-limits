@@ -1,0 +1,45 @@
+
+---
+author: "Carl Boettiger"
+institute: "UC Berkeley"
+date: "`r Sys.Date()`"
+title: Theoretical Limits to Forecasting
+
+output: hrbrthemes::ipsum_pdf
+
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(patchwork)
+
+library(fable)
+library(transformr)
+library(knitr)
+library(ggthemes)
+
+#theme_set(theme_solarized(base_size=16))
+scale_colour_discrete <- function(...) scale_colour_solarized()
+scale_fill_discrete <- function(...) scale_fill_solarized()
+pal <- solarized_pal()(6)
+txtcolor <- "#586e75"
+
+knitr::opts_chunk$set(message=FALSE, warning = FALSE, include = FALSE)
+```
+
+
+
+# A simple forecast
+
+
+- ARIMA
+- Neural net
+- true model
+- Gaussian Process model estimate
+
+
+
+# Decisions
+
+- A bad model (long-term forecast) that still gives good decisions: Consider a simple optimal harvest problem with correct K / B_MSY value, but vastly off in r (and limited discounting)
