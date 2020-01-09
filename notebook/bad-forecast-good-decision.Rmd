@@ -4,63 +4,106 @@ author: "Carl Boettiger"
 output: github_document
 ---
 
+```{r message=FALSE, warning=FALSE}
+library(ggthemes)
+library(hrbrthemes)
+library(ggplot2)
+library(Cairo)
+library(extrafont)
+extrafont::loadfonts()
+ggplot2::theme_set(hrbrthemes::theme_ipsum_rc())
+#theme_set(theme_solarized(base_size=16))
+
+scale_colour_discrete <- function(...) scale_colour_solarized()
+scale_fill_discrete <- function(...) scale_fill_solarized()
+pal <- solarized_pal()(6)
+txtcolor <- "#586e75"
+```
+
+
+```{r}
+library(tidyverse)
+library(MDPtoolbox)
+```
+
+
 ```{r}
 states <- seq(0,20, length.out = 200)
 actions <- states
 obs <- states
 sigma_g <- 0.1
 reward_fn <- function(x,h) pmin(x,h)
-discount <- 0.95
+discount <- 0.99
 
+# K is at twice max of f3; 8 * K_3 / 5
+f1 <- function(x, h = 0, r = 1, K = 10 * 8 / 5){
+  s <- pmax(x - h, 0)
+  s + s * (r * (1 - s / K) )
+}
+f2 <- function(x, h = 0, r = 1, K = 10){
+  s <- pmax(x - h, 0)
+  s + s * (r * (1 - s / K) )
+}
 
-f1 <- function(x, h = 0, r = .1, K = 15){
-  s <- pmax(x - h, 0)
-  s * exp(r * (1 - s / K) )
-}
-f2 <- function(x, h = 0, r = .1, K = 10){
-  s <- pmax(x - h, 0)
-  s * exp(r * (1 - s / K) )
-}
+# max is at 4 * K / 5 
 f3  <- function(x, h = 0, r = .01, K = 10){
   s <- pmax(x - h, 0)
-  s * exp(s ^ 3 * r * (1 - s / K))
+  s + s ^ 4 * r * (1 - s / K)
 }
 
 models <- list(f1, f2, f3)
 names(models) <- c("f1", "f2", "f3")
+
+
+## Could consider ricker-style versions of these models. need to take care to set limits correctly
+## to get correspondence (recall x * e^y ~ x *(1 + y) for small y), e.g. something like
+#f1 <- function(x, h = 0, r = .1, K = 15){
+#  s <- pmax(x - h, 0)
+#  s * exp(r * (1 - s / K) )
+#}
+#f3  <- function(x, h = 0, r = .01, K = 10){
+#  s <- pmax(x - h, 0)
+#  s * exp(s ^ 3 * r * (1 - s / K))
+#}
+
 ```
 
+
+
+
 ```{r}
-library(tidyverse)
 d <- map_dfc(models, function(f) f(states) - states) %>% mutate(state = states)
 d %>% pivot_longer(names(models), "model") %>%
   ggplot(aes(state, value, col=model)) +
-  geom_point() 
-
-#+ 
-#  coord_cartesian(ylim = c(0, 100))
+  geom_point() + 
+  geom_hline(aes(yintercept = 0)) + 
+  coord_cartesian(ylim = c(-1, 10), xlim = c(0,16))
 ```
 
 
-
-
-
-
+Comparing forecasts
 
 ```{r}
-fisheries <- function(f,
-                      states = x,
-                      actions = states,
-                      reward_fn = function(x,a) pmin(x,a),
-                      sigma_g = 0.1){
+x0 <- 3
 
-  ## Transition and Reward Matrices
+
+
+```
+
+
+## Optimal Management
+
+```{r}
+# A function to compute the transition matrices for each model:
+transition_matrices <- function(f,
+                      states,
+                      actions,
+                      sigma_g){
+
   n_s <- length(states)
   n_a <- length(actions)
 
   transition <- array(0, dim = c(n_s, n_s, n_a))
-  reward <- array(0, dim = c(n_s, n_a))
-
   for (k in 1:n_s) {
     for (i in 1:n_a) {
       nextpop <- f(states[k], actions[i])
@@ -82,13 +125,125 @@ fisheries <- function(f,
       reward[k, i] <- reward_fn(states[k], actions[i])
     }
   }
-
-  
-  list(transition = transition, 
-       reward = reward)
+  transition
 }
 
-#models <- lapply(models, function(f) 
-#                 fisheries(f, states, actions, 
-#                           reward_fn, sigma_g))
+## Reward matrix is shared by each model
+n_s <- length(states)
+n_a <- length(actions)
+reward <- array(0, dim = c(n_s, n_a))
+for (k in 1:n_s) {
+  for (i in 1:n_a) {
+    reward[k, i] <- reward_fn(states[k], actions[i])
+  }
+}
+
+transitions <- lapply(models, function(f) transition_matrices(f, states, actions, sigma_g))
+
 ```
+
+
+Evolution of probability distribution at matrix exponent
+
+```{r}
+prob_dynamics <- function(M, X, Tmax){
+  probability <- t(M) %^% Tmax %*% X 
+  data.frame(state = states, probability)
+}
+```
+
+
+
+```{r}
+
+policies <- map_dfr(transitions, function(P){
+  soln <- mdp_value_iteration(P, reward, discount = discount)
+  tibble(states, policy = soln$policy, escapement = states - actions[soln$policy])
+}, .id = "model")
+
+```
+
+
+```{r}
+policies %>%
+  ggplot(aes(states,escapement, col=model)) + geom_line()
+```
+
+
+
+
+
+
+Management under the wrong model (`f3`)
+
+
+
+```{r}
+library(mdplearning)
+Tmax <- 100
+x0 <- which.min(abs(states - 3))
+reps <- 5
+set.seed(12345)
+
+
+## Simulate each policy reps times, with `f3` as the true model:
+
+sims <- map_dfr(names(transitions), 
+                function(m){
+                  policy <- policies %>% filter(model == m) %>% pull(policy)
+                  map_dfr(1:reps, 
+                          function(i){
+                            
+                            mdp_planning(transitions[["f3"]], reward, discount,
+                                     policy = policy, x0 = x0, Tmax = Tmax) %>%
+                              
+                              select(value, state, time)  %>% 
+                              mutate(state = states[state]) # index->value
+                            },
+                          .id = "reps")
+                },
+                .id = "model")
+
+
+```
+
+```{r}
+fig_ts <- 
+  sims %>%
+  filter(time < 25) %>%
+  ggplot(aes(time, state, col=model, group = interaction(model,reps))) + 
+  geom_line(alpha=0.5) 
+fig_ts
+```
+
+```{r fig.cap = "Corresponding utility (measured as mean net present value, that is: cumulative value, discounting future values by $\\delta^t$, averaged across replicates). Note that the exepcted utility under model 1, which has the worst forecast, is nearly identical to the optimal utility achieved by managing under the correct model, 3.  The utility derived from model 2 is far smaller, despite it's overall better performance in long term forecasts."}
+##  Net Present Value accumulates over time, equivalent for models with near-identical management stategy
+value_fig <- sims %>% 
+  group_by(model, reps) %>%
+  mutate(npv = cumsum(value * discount ^ time)) %>%
+  group_by(time, model)  %>% 
+  summarise(mean_npv = mean(npv)) %>%
+  ggplot(aes(time, mean_npv, fill=model)) +
+  ## Area plots are weird but avoids overplotting
+  geom_area(alpha = 0.9) +
+  # geom_ribbon(aes(ymin = 0, ymax = mean_npv), alpha = 0.6) + 
+  ylab("Net present value") + xlab("time")  
+value_fig
+```
+
+## Conclusions
+
+
+
+- A good forecast does not mean good management
+- A bad forecast does not mean the model is bad for management
+- A model permitting successful management does not imply the model is "correct" or generally "good at forecasting"
+
+
+Model with the egregiously optimistic long-term forecast for the stock size of an unexploited fishery nevertheless actually leads to more conservative management.  In contrast, the model which correctly predicts the long-term average stock size without fishing nevertheless leads to substantial overharvesting.  
+
+
+
+
+
+
