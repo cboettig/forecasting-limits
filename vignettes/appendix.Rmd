@@ -53,8 +53,8 @@ sim_df <-  sim(may, p)
 train <- sim_df %>% filter(t < 1500) %>% mutate(line = "training data")
 
 # inspect data
-#sim_df %>% ggplot(aes(t,x)) + geom_point()
-#train %>% ggplot(aes(t,x)) + geom_point()
+# sim_df %>% ggplot(aes(t,x)) + geom_point()
+# train %>% ggplot(aes(t,x)) + geom_point()
 ```
 
 

@@ -115,13 +115,20 @@ transitions <- lapply(models, function(f) transition_matrices(f, states, actions
 
 Evolution of probability distribution at matrix exponent
 
+```{r}
+prob_dynamics <- function(M, X, Tmax){
+  probability <- t(M) %^% Tmax %*% X 
+  data.frame(state = states, probability)
+}
+```
+
 
 
 ```{r}
 
 policies <- map_dfr(transitions, function(P){
   soln <- mdp_value_iteration(P, reward, discount = discount)
-  tibble(states, escapement = states - actions[soln$policy])
+  tibble(states, policy = soln$policy, escapement = states - actions[soln$policy])
 }, .id = "model")
 
 ```
@@ -137,13 +144,34 @@ policies %>%
 
 
 
-Management under the wrong model
+Management under the wrong model (`f3`)
+
+
 
 ```{r}
-
+library(mdplearning)
+x0 <- which.min(abs(states - 3))
+set.seed(12345)
+sims <- map_dfr(names(transitions), 
+        function(m){
+          policy <- policies %>% filter(model == m) %>% pull(policy)
+          mdp_planning(transitions[["f3"]], reward, discount, model_prior = c(1), 
+                   policy = policy, x0 = x0, Tmax = Tmax) %>% select(state, time)
+          }, 
+        .id = "model")
 
 ```
 
+```{r}
+df %>% 
+  mutate(state = states[state]) %>% 
+  select(-obs,-value) %>%
+  pivot_longer(-time) %>%
+  ggplot(aes(time, value, col=name)) + 
+  geom_point() + geom_path() #+ 
+  #facet_wrap(~name, scales="free_y", ncol=1)
+  
+```
 
 ## Conclusions
 
