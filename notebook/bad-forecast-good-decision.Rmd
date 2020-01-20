@@ -182,8 +182,9 @@ forecast %>%
 ```{r}
 d <- forecast %>% group_by(model) %>% 
   mutate(true = true_sim$x) %>%
-  summarise(rmsd = sqrt(mean( (mean - true) ^ 2 ) )
-  )
+  summarise(rmsd = sqrt(mean( (mean - true) ^ 2 )),
+            r2 = 1 - sum( (mean - true) ^ 2  ) / sum( mean ^ 2 )
+            )
 rmsd <- d %>% pull(rmsd)
 names(rmsd) <- d %>% pull(model)
 
