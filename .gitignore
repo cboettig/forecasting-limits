@@ -5,3 +5,4 @@ inst/doc
 .Ruserdata
 *.html
 .DS_Store
+*_cache/*

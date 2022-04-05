@@ -1,10 +1,8 @@
----
-title: "Appendix"
-author: "Carl Boettiger"
-output: github_document
----
-  
-```{r setup, message = FALSE}
+Appendix
+================
+Carl Boettiger
+
+``` r
 library(knitr)
 library(ggthemes)
 library(tidyverse)
@@ -23,19 +21,18 @@ txtcolor <- "#586e75"
 #tensorflow::use_session_with_seed(12345)
 ```
 
-  
-```{r}
+``` r
 p <- list(r = .05, K = 200, Q = 5, H = 38, sigma = .02, a=2.3, N = 3e3, x0 = 20)
 horizon <- 50
 ```
 
-```{r}
+``` r
 growth <- function(x, p) x * p$r * (1 - x / p$K)
 consumption <- function(x, p) p$a * x ^ p$Q / (x^p$Q + p$H^p$Q)
 may <- function(x, p) x + growth(x,p) - consumption(x,p)
 ```
 
-```{r}
+``` r
 # Generic simulator routine
 sim <- function(f, p){
   x <- numeric(p$N)
@@ -49,7 +46,7 @@ sim <- function(f, p){
 }
 ```
 
-```{r}
+``` r
 set.seed(111111)
 sim_df <-  sim(may, p)
 train <- sim_df %>% filter(t < 1500) %>% mutate(line = "training data")
@@ -59,8 +56,7 @@ train <- sim_df %>% filter(t < 1500) %>% mutate(line = "training data")
 # train %>% ggplot(aes(t,x)) + geom_point()
 ```
 
-
-```{r}
+``` r
 #plan("multisession")
 p1 <- p
 p1$x0 <- train[[length(train$x),"x"]]
@@ -71,34 +67,51 @@ ideal_forecast <-
                  function(reps) sim(may, p1), .id = "reps") %>% 
   mutate(t = t + horizon, 
          line = "ideal forecast")
-
-
 ```
-
-
-
 
 # Model-based forecast
 
-
-```{r}
+``` r
 library(greta)
 ```
 
+    ## 
+    ## Attaching package: 'greta'
+
+    ## The following object is masked from 'package:dplyr':
+    ## 
+    ##     slice
+
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     binomial, cov2cor, poisson
+
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     %*%, apply, backsolve, beta, chol2inv, colMeans, colSums, diag,
+    ##     eigen, forwardsolve, gamma, identity, rowMeans, rowSums, sweep,
+    ##     tapply
+
 Bayesian estimate on training data only:
 
-```{r}
+``` r
 wide <- select(train, x) %>% as.matrix() 
 n <- dim(wide)[1]
 x_t1 <- wide[-1,]
 x_t <- wide[-n,] 
 ```
 
-```{r}
-
-
-
+``` r
 a <- uniform(0, 10)
+```
+
+    ## ℹ Initialising python and checking dependencies, this may take a moment.
+
+    ## ✓ Initialising python and checking dependencies ... done!
+
+    ## 
+
+``` r
 r <- uniform(0, 4 * p$r)
 Q <- uniform(0, 4 * p$Q)
 K <- uniform(0, 4 * p$K)
@@ -112,17 +125,16 @@ distribution(x_t1) <- normal(mean, sigma * x_t)
 m <- model(a, r, K, H, sigma)
 ```
 
-```{r cache=TRUE}
-
+``` r
 system.time({
   draws <- mcmc(m, n_samples = 10000, warmup = 3000, chains = 60, verbose = FALSE)
 })
 ```
 
+    ##      user    system   elapsed 
+    ## 20958.904  2800.903   829.754
 
-
-
-```{r}
+``` r
 samples <-  
   map_dfr(draws, 
           function(x) data.frame(x, t = 1:dim(x)[1]), 
@@ -130,37 +142,28 @@ samples <-
   gather(variable, value, -t, -chain)
 ```
 
-```{r}
+``` r
 #Q = 5
 true <- 
   as_tibble(p) %>% select(-N, -x0, -Q) %>%
   gather(variable, value)
 ```
 
-```{r}
+``` r
 samples %>% ggplot() + 
   geom_histogram(aes(value), bins = 30)  +
   geom_vline(data = true, aes(xintercept = value), col = "red", lwd = 1) + 
   facet_wrap(~variable, scales = "free")
-
 ```
 
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
+Replicate simulations of stochastic model with parameters drawn from
+posteriors
 
+(would be great to have a `greta` method for this…)
 
-
-
-
-
-
-
-
-Replicate simulations of stochastic model with parameters drawn from posteriors
-
-(would be great to have a `greta` method for this...)
-
-
-```{r}
+``` r
 #q <- posterior_samples[1,] %>%  mutate(N=1e3, x0 = x0, Q = p$Q)
 #sim(may, q)
 
@@ -169,10 +172,9 @@ Replicate simulations of stochastic model with parameters drawn from posteriors
 #  sim(may, p)
 #},
 #.id = "reps")
-
 ```
 
-```{r}
+``` r
 alpha <- 0.1
 training_data <- train %>% select(t,x) %>% mutate(reps="1") #, set = "training")
 h <- nrow(training_data %>% filter(reps=="1"))
@@ -190,7 +192,7 @@ true_forecast <-
   mutate(set = "true")
 ```
 
-```{r}
+``` r
 #a <- unname(sample(unlist(draws, TRUE), 100))
 
 posterior_samples <- 
@@ -204,7 +206,7 @@ posterior_sims <- posterior_samples %>%
   map_dfr(function(q) sim(may, q) ,.id = "reps")
 ```
 
-```{r}
+``` r
 predicted_forecast <- 
   posterior_sims %>% 
     mutate(t = t+h) %>%
@@ -212,8 +214,7 @@ predicted_forecast <-
     mutate(set = "predicted")
 ```
 
-
-```{r}
+``` r
 model_forecast <- bind_rows(predicted_forecast, true_forecast)
 write_csv(model_forecast, "model_forecast.csv.gz")
 
@@ -226,8 +227,4 @@ model_forecast %>%
   scale_color_solarized()
 ```
 
-
-
-```{r}
-```
-
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
