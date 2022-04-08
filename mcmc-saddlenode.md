@@ -23,7 +23,7 @@ txtcolor <- "#586e75"
 
 ``` r
 p <- list(r = .05, K = 200, Q = 5, H = 38, sigma = .02, a=2.3, N = 3e3, x0 = 20)
-horizon <- 50
+horizon <- 1500
 ```
 
 ``` r
@@ -57,7 +57,6 @@ train <- sim_df %>% filter(t < 1500) %>% mutate(line = "training data")
 ```
 
 ``` r
-#plan("multisession")
 p1 <- p
 p1$x0 <- train[[length(train$x),"x"]]
 p1$N <- horizon
@@ -105,11 +104,7 @@ x_t <- wide[-n,]
 a <- uniform(0, 10)
 ```
 
-    ## ℹ Initialising python and checking dependencies, this may take a moment.
-
-    ## ✓ Initialising python and checking dependencies ... done!
-
-    ## 
+    ## ℹ Initialising python and checking dependencies, this may take a moment.[K✓ Initialising python and checking dependencies ... done![K
 
 ``` r
 r <- uniform(0, 4 * p$r)
@@ -126,13 +121,21 @@ m <- model(a, r, K, H, sigma)
 ```
 
 ``` r
-system.time({
-  draws <- mcmc(m, n_samples = 10000, warmup = 3000, chains = 60, verbose = FALSE)
+mmcmc <- memoise::memoise(mcmc, cache = memoise::cache_filesystem("mcmc_cache"))
+                 
+bench::bench_time({                 
+draws <- mmcmc(m, n_samples = 100000, warmup = 50000, chains = 4, verbose = FALSE)
 })
 ```
 
-    ##      user    system   elapsed 
-    ## 20958.904  2800.903   829.754
+    ## process    real 
+    ##   7.84h   1.67h
+
+``` r
+bayesplot::mcmc_trace(draws[1:4])
+```
+
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 samples <-  
@@ -141,6 +144,13 @@ samples <-
           .id = "chain") %>% 
   gather(variable, value, -t, -chain)
 ```
+
+``` r
+samples %>% filter(chain %in% as.character(12:16))  %>% 
+  ggplot(aes(t, value, col=chain)) + geom_line() + facet_wrap(~variable, scales = "free")
+```
+
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ``` r
 #Q = 5
@@ -156,7 +166,7 @@ samples %>% ggplot() +
   facet_wrap(~variable, scales = "free")
 ```
 
-![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 Replicate simulations of stochastic model with parameters drawn from
 posteriors
@@ -227,4 +237,4 @@ model_forecast %>%
   scale_color_solarized()
 ```
 
-![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](mcmc-saddlenode_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
